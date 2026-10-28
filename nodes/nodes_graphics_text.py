@@ -457,15 +457,36 @@ class CR_SelectFont:
     
         if platform.system() == "Windows":
             system_root = os.environ.get("SystemRoot")
-            font_dir = os.path.join(system_root, "Fonts") if system_root else None
-       # Default debian-based Linux & MacOS font dirs
+            font_dirs = [os.path.join(system_root, "Fonts")] if system_root else []
         elif platform.system() == "Linux":
-            font_dir = "/usr/share/fonts/truetype"
+            # Distros disagree on the layout under /usr/share/fonts: Debian keeps
+            # everything in truetype/, Arch drops TTF/ and per-family dirs straight
+            # in. Walk the roots that exist instead of assuming one of them.
+            font_dirs = ["/usr/share/fonts", "/usr/local/share/fonts",
+                         os.path.expanduser("~/.local/share/fonts"),
+                         os.path.expanduser("~/.fonts")]
         elif platform.system() == "Darwin":
-            font_dir = "/System/Library/Fonts"    
- 
-        file_list = [f for f in os.listdir(font_dir) if os.path.isfile(os.path.join(font_dir, f)) and f.lower().endswith(".ttf")]
-                        
+            font_dirs = ["/System/Library/Fonts", "/Library/Fonts",
+                         os.path.expanduser("~/Library/Fonts")]
+        else:
+            font_dirs = []
+
+        file_list = []
+        seen = set()
+        for font_dir in font_dirs:
+            if not font_dir or not os.path.isdir(font_dir):
+                continue
+            for root, _dirs, files in os.walk(font_dir):
+                for f in files:
+                    if f.lower().endswith(".ttf") and f not in seen:
+                        seen.add(f)
+                        file_list.append(f)
+        file_list.sort()
+        # An empty combo list makes the node unusable in the UI and breaks
+        # /object_info consumers that expect at least one choice.
+        if not file_list:
+            file_list = ["none"]
+
         return {"required": {
                 "font_name": (file_list,),
                 }       
